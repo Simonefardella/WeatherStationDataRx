@@ -10,7 +10,7 @@ volatile bool rxOk = false;           // Variable zum anzeigen, das die Daten im
 // Helper for ISR call
 WeatherStationDataRx *WeatherStationDataRx::__instance[4] = {0};
 
-#ifdef ESP8266 || ESP32
+#if defined(ESP8266) || defined(ESP32)
 ICACHE_RAM_ATTR void WeatherStationDataRx::_ISR()
 #else
 void WeatherStationDataRx::_ISR()
@@ -100,6 +100,12 @@ void WeatherStationDataRx::begin()
     DEBUG_PRINTLN("WeatherStationDataRx begin");
 }
 
+void WeatherStationDataRx::end()
+{
+    DEBUG_PRINTLN("WeatherStationDataRx end");
+    detachInterrupt(digitalPinToInterrupt(dataPin));    
+}
+
 void WeatherStationDataRx::pair(byte pairedDevices[], void (*pairedDeviceAdded)(byte newID))
 {
     this->pairedDeviceAdded = pairedDeviceAdded;
@@ -107,7 +113,7 @@ void WeatherStationDataRx::pair(byte pairedDevices[], void (*pairedDeviceAdded)(
     if (pairedDevices == NULL)
     {
         DEBUG_PRINTLN("Start pairing for 1 min.");
-        pairingEndMillis = millis() + 60 * 1000;
+        pairingEndMillis = millis() + 60 * 1000L;
     }
     else
     {
@@ -141,7 +147,7 @@ char WeatherStationDataRx::readData()
 
     if (rxOk)
     {                                                       // wenn die Interrupt-Routine rxOk auf true gesetzt hat, dann ist der Puffer mit den Daten gefuellt
-        byte randomID = (unsigned long)rxBuffer & 0xff;     // die ersten 8 Bits enthalten eine Zufalls-ID (wird beim Batteriewechsel neu generiert)
+        randomID = (unsigned long)rxBuffer & 0xff;     // die ersten 8 Bits enthalten eine Zufalls-ID (wird beim Batteriewechsel neu generiert)
         bool bState = (unsigned long)(rxBuffer >> 8) & 0x1; // wenn Bit 8 gesetzt ist, sind die Batterien schwach
         byte xBits = (unsigned long)(rxBuffer >> 9) & 0x3;  // die Bits 9 und 10 sind bei Wind- und Regensensor immer 1 (Wert von xBits = 3)
         buttonState = (unsigned long)rxBuffer >> 11 & 0x1;  // wenn Bit 11 gesetzt ist, wurde die Taste am Sensor betaetigt
@@ -175,8 +181,8 @@ char WeatherStationDataRx::readData()
                     {
                         bState ? batteryState |= 1 : batteryState &= 0; // wenn die Batterien schwach sind, Bit 0 von batteryState auf 1 setzen
 
-                        temperature = ((unsigned long)(rxBuffer >> 12) & 0xfff);                              // die Bits 12-23 enthalten den Temperaturwert (in 0.1 °C)
-                        humidity = ((unsigned long)((rxBuffer >> 24) & 0xf) * 10) + ((rxBuffer >> 28) & 0xf); // die Bits 24-27 (einzer) und 28-31 (zehner) enthalten den Luftfeuchtigkeitsert (in %)
+                        temperature = (long)(-2048 * ((rxBuffer >> 23) & 0x1)) + (unsigned long)((rxBuffer >> 12) & 0x7ff); // die Bits 12-23 enthalten den Temperaturwert (in 0.1 °C)
+                        humidity = (unsigned long)((rxBuffer >> 24) & 0xf)  + ((rxBuffer >> 28) & 0xf) * 10; // die Bits 24-27 (einzer) und 28-31 (zehner) enthalten den Luftfeuchtigkeitsert (in %)
 
                         DEBUG_PRINTF("Temperatur: %d.%d", (int)(temperature / 10), (int)(temperature % 10));
                         DEBUG_PRINT("°C")
@@ -358,4 +364,12 @@ bool WeatherStationDataRx::pairingDevice(byte randomID, byte xBits, byte subID)
         pairedDeviceAdded(randomID);
 
     return true;
+}
+
+byte WeatherStationDataRx::batteryStatus() {
+  return batteryState;
+}
+
+byte WeatherStationDataRx::sensorID() {
+  return randomID;
 }
